@@ -1,6 +1,4 @@
-test/output
-test/vimtest
-profile_file*
-.coverage_covimerage
-coverage.xml
-codecov_validation
+*.swp
+cscope.out
+cscope.files
+tags
