@@ -240,6 +240,7 @@ def Filetype_settings(): void
     setlocal nolist
     setlocal nomodifiable
     setlocal nonumber
+    setlocal norelativenumber
     setlocal nospell
     setlocal noswapfile
     setlocal nowrap
