@@ -225,9 +225,10 @@ enddef
 def MutateNode(mode: string): void
     Tree_set_collapsed_under_cursor(g_tree_top, str2nr(mode))
 enddef
-command -nargs=1 MutateNode MutateNode(<f-args>)
-command ExecNode Tree_exec_node_under_cursor(g_tree_top)
-command WipeNode Tree_wipe(g_tree_top)
+
+command -nargs=1 Vim9TreeMutateNode MutateNode(<f-args>)
+command Vim9TreeExecNode Tree_exec_node_under_cursor(g_tree_top)
+command Vim9TreeWipeNode Tree_wipe(g_tree_top)
 
 # Apply local settings to an Yggdrasil buffer
 def Filetype_settings(): void 
@@ -245,15 +246,15 @@ def Filetype_settings(): void
     setlocal noswapfile
     setlocal nowrap
 
-    nnoremap <silent> <buffer> <Plug>(yggdrasil-toggle-node) :MutateNode -1<CR>
-    nnoremap <silent> <buffer> <Plug>(yggdrasil-open-node) :MutateNode 0<CR>
-    nnoremap <silent> <buffer> <Plug>(yggdrasil-close-node) :MutateNode 1<CR>
-    nnoremap <silent> <buffer> <Plug>(ggdrasil-execute-node) :ExecNode<CR>
-    nnoremap <silent> <buffer> <Plug>(yggdrasil-wipe-tree) :WipeNode<CR>
+    nnoremap <silent> <buffer> <Plug>(yggdrasil-toggle-node) :Vim9TreeMutateNode -1<CR>
+    nnoremap <silent> <buffer> <Plug>(yggdrasil-open-node) :Vim9TreeMutateNode 0<CR>
+    nnoremap <silent> <buffer> <Plug>(yggdrasil-close-node) :Vim9TreeMutateNode 1<CR>
+    nnoremap <silent> <buffer> <Plug>(ggdrasil-execute-node) :Vim9TreeExecNode<CR>
+    nnoremap <silent> <buffer> <Plug>(yggdrasil-wipe-tree) :Vim9TreeWipeNode<CR>
 
     if !exists('g:yggdrasil_no_default_maps')
         nmap <silent> <buffer> o    <Plug>(yggdrasil-toggle-node)
-        nmap <silent> <buffer> <cr> <Plug>(yggdrasil-execute-node)
+        nmap <silent> <buffer> <CR> <Plug>(yggdrasil-execute-node)
         nmap <silent> <buffer> q    <Plug>(yggdrasil-wipe-tree)
     endif
 enddef
