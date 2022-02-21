@@ -1,13 +1,11 @@
 vim9script
 
-var g_tree_top = {}
-
 # Callback to retrieve the tree item representation of an object.
 def Node_get_tree_item_cb(node: dict<any>, object: number, status: string, tree_item: dict<any>): void
     if status ==? 'success'
         var new_node = Node_new(node.tree, object, tree_item, node)
         add(node.children, new_node)
-        Tree_render(new_node.tree)
+        Render(new_node.tree)
     endif
 enddef
 
@@ -123,7 +121,7 @@ def Tree_set_root_cb(tree: dict<any>, object: number, status: string, tree_item:
     if status ==? 'success'
         tree.maxid = -1
         tree.root = Node_new(tree, object, tree_item, {})
-        Tree_render(tree)
+        Render(tree)
     endif
 enddef
 
@@ -136,14 +134,14 @@ enddef
 # Expand or collapse the node under cursor, and render the tree.
 # Please refer to *Node_set_collapsed()* for details about the
 # arguments and behaviour.
-def Tree_set_collapsed_under_cursor(self: dict<any>, collapsed: number): void
+export def Tree_set_collapsed_under_cursor(self: dict<any>, collapsed: number): void
     var node = Get_node_under_cursor(self)
     node.set_collapsed(node, collapsed)
-    Tree_render(self)
+    Render(self)
 enddef
 
 # Run the action associated to the node currently under the cursor.
-def Tree_exec_node_under_cursor(self: dict<any>): void
+export def Tree_exec_node_under_cursor(self: dict<any>): void
     var node = Get_node_under_cursor(self)
     node.exec(node)
 enddef
@@ -151,7 +149,7 @@ enddef
 # Render the {tree}. This will replace the content of the buffer with the
 # tree view. Clear the index, setting it to a list containing a guard
 # value for index 0 (line numbers are one-based).
-def Tree_render(tree: dict<any>): void
+export def Render(tree: dict<any>): void
     if &filetype !=# 'yggdrasil'
         return
     endif
@@ -168,7 +166,7 @@ def Tree_render(tree: dict<any>): void
     #execute "put " text
     #silent 0put=text
     #$d_
-    deletebufline(g_tree_top.bufnr, 1, "$")
+    deletebufline(tree.bufnr, 1, "$")
     map(split(text, "\n"), (i, v) => append(i, [v]))
 
     setlocal nomodifiable
@@ -187,7 +185,7 @@ def Node_update(tree: dict<any>, object: number, status: string, tree_item: dict
         node.children = []
         node.lazy_open = tree_item.collapsibleState !=? 'none'
     endfor
-    Tree_render(tree)
+    Render(tree)
 enddef
 
 # Update the view if nodes have changed. If called with no arguments,
@@ -204,59 +202,8 @@ def Tree_update(self: dict<any>, args: list<any>): void
 enddef
 
 # Destroy the tree view. Wipe out the buffer containing it.
-def Tree_wipe(self: dict<any>): void
+export def Tree_wipe(self: dict<any>): void
     execute 'bwipeout ' .. self.bufnr
-enddef
-
-# Apply syntax to an Yggdrasil buffer
-def Filetype_syntax(): void
-    syntax clear
-    syntax match YggdrasilMarkLeaf        "•" contained
-    syntax match YggdrasilMarkCollapsed   "▸" contained
-    syntax match YggdrasilMarkExpanded    "▾" contained
-    syntax match YggdrasilNode            "\v^(\s|[▸▾•])*.*"
-    \      contains=YggdrasilMarkLeaf,YggdrasilMarkCollapsed,YggdrasilMarkExpanded
-
-    highlight def link YggdrasilMarkLeaf        Type
-    highlight def link YggdrasilMarkExpanded    Type
-    highlight def link YggdrasilMarkCollapsed   Macro
-enddef
-
-def MutateNode(mode: string): void
-    Tree_set_collapsed_under_cursor(g_tree_top, str2nr(mode))
-enddef
-
-command -nargs=1 Vim9TreeMutateNode MutateNode(<f-args>)
-command Vim9TreeExecNode Tree_exec_node_under_cursor(g_tree_top)
-command Vim9TreeWipeNode Tree_wipe(g_tree_top)
-
-# Apply local settings to an Yggdrasil buffer
-def Filetype_settings(): void 
-    setlocal bufhidden=wipe
-    setlocal buftype=nofile
-    setlocal foldcolumn=0
-    setlocal foldmethod=manual
-    setlocal nobuflisted
-    setlocal nofoldenable
-    setlocal nolist
-    setlocal nomodifiable
-    setlocal nonumber
-    setlocal norelativenumber
-    setlocal nospell
-    setlocal noswapfile
-    setlocal nowrap
-
-    nnoremap <silent> <buffer> <Plug>(yggdrasil-toggle-node) :Vim9TreeMutateNode -1<CR>
-    nnoremap <silent> <buffer> <Plug>(yggdrasil-open-node) :Vim9TreeMutateNode 0<CR>
-    nnoremap <silent> <buffer> <Plug>(yggdrasil-close-node) :Vim9TreeMutateNode 1<CR>
-    nnoremap <silent> <buffer> <Plug>(ggdrasil-execute-node) :Vim9TreeExecNode<CR>
-    nnoremap <silent> <buffer> <Plug>(yggdrasil-wipe-tree) :Vim9TreeWipeNode<CR>
-
-    if !exists('g:yggdrasil_no_default_maps')
-        nmap <silent> <buffer> o    <Plug>(yggdrasil-toggle-node)
-        nmap <silent> <buffer> <CR> <Plug>(yggdrasil-execute-node)
-        nmap <silent> <buffer> q    <Plug>(yggdrasil-wipe-tree)
-    endif
 enddef
 
 # Turns the current buffer into an Yggdrasil tree view. Tree data is retrieved
@@ -267,7 +214,7 @@ enddef
 # known internal identifier of the nodes. The {index} is a list that
 # maps line numbers to nodes.
 export def New(provider: dict<any>): dict<any>
-    g_tree_top = {
+    var tree_top = {
     \ 'bufnr': bufnr('%'),
     \ 'maxid': -1,
     \ 'root': {},
@@ -279,14 +226,5 @@ export def New(provider: dict<any>): dict<any>
     \ 'wipe': Tree_wipe,
     \ }
 
-    augroup vim_yggdrasil
-        autocmd!
-        autocmd FileType yggdrasil Filetype_syntax() | Filetype_settings()
-        autocmd BufEnter <buffer> Tree_render(g_tree_top)
-    augroup END
-
-    setlocal filetype=yggdrasil
-
-    g_tree_top.update(g_tree_top, [])
-    return g_tree_top
+    return tree_top
 enddef

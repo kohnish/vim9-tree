@@ -2,8 +2,6 @@ vim9script
 
 import "tree.vim"
 
-var g_handle = {}
-
 # Minimal example of tree data. The objects are integer numbers.
 # Here the tree structure is implemented with a dictionary mapping parents to
 # children.
@@ -79,34 +77,66 @@ def GetTreeItem(Callback: func, object: number): void
     Callback('success', Number_to_treeitem(object))
 enddef
 
-# Define the tree data provider.
-#
-# The data provider exposes three methods that, given an object as input,
-# produce the list of children, the parent object, and the tree item
-# representation for the object respectively.
-#
-# Each method takes as first argument a callback, that is called by the provider
-# to return the result asynchronously. The callback takes two arguments, the
-# first is a status parameter, the second is the result of the call.
-#var g_provider = {
-#\ 'getChildren': GetChildren,
-#\ 'getParent': GetParent,
-#\ 'getTreeItem': GetTreeItem,
-#\ }
+def MutateNode(mode: string): void
+    if mode == "toggle"
+        tree.Tree_set_collapsed_under_cursor(b:handle, -1)
+    elseif mode == "wipe"
+        tree.Tree_wipe(b:handle)
+    elseif mode == "open"
+        tree.Tree_set_collapsed_under_cursor(b:handle, 0)
+    elseif mode == "close"
+        tree.Tree_set_collapsed_under_cursor(b:handle, 1)
+    elseif mode == "exec"
+        tree.Tree_exec_node_under_cursor(b:handle)
+    endif
+enddef
+
+command -nargs=1 Vim9TreeMutateNode MutateNode(<f-args>)
+
+# Apply local settings to an Yggdrasil buffer
+def Filetype_settings(): void 
+    setlocal bufhidden=wipe
+    setlocal buftype=nofile
+    setlocal foldcolumn=0
+    setlocal foldmethod=manual
+    setlocal nobuflisted
+    setlocal nofoldenable
+    setlocal nolist
+    setlocal nomodifiable
+    setlocal nonumber
+    setlocal norelativenumber
+    setlocal nospell
+    setlocal noswapfile
+    setlocal nowrap
+
+    nnoremap <silent> <buffer> <Plug>(yggdrasil-toggle-node) :Vim9TreeMutateNode toggle<CR>
+    nnoremap <silent> <buffer> <Plug>(yggdrasil-open-node) :Vim9TreeMutateNode open<CR>
+    nnoremap <silent> <buffer> <Plug>(yggdrasil-close-node) :Vim9TreeMutateNode close<CR>
+    nnoremap <silent> <buffer> <Plug>(ggdrasil-execute-node) :Vim9TreeMutateNode exec<CR>
+    nnoremap <silent> <buffer> <Plug>(yggdrasil-wipe-tree) :Vim9TreeMutateNode wipe<CR>
+
+    if !exists('g:yggdrasil_no_default_maps')
+        nmap <silent> <buffer> o    <Plug>(yggdrasil-toggle-node)
+        nmap <silent> <buffer> <CR> <Plug>(yggdrasil-execute-node)
+        nmap <silent> <buffer> q    <Plug>(yggdrasil-wipe-tree)
+    endif
+enddef
+
+def Filetype_syntax(): void
+    syntax clear
+    syntax match YggdrasilMarkLeaf        "•" contained
+    syntax match YggdrasilMarkCollapsed   "▸" contained
+    syntax match YggdrasilMarkExpanded    "▾" contained
+    syntax match YggdrasilNode            "\v^(\s|[▸▾•])*.*"
+    \      contains=YggdrasilMarkLeaf,YggdrasilMarkCollapsed,YggdrasilMarkExpanded
+
+    highlight def link YggdrasilMarkLeaf        Type
+    highlight def link YggdrasilMarkExpanded    Type
+    highlight def link YggdrasilMarkCollapsed   Macro
+enddef
 
 
-
-# Create a tree view with the given provider
-#
-# This function turns the current buffer into a tree view using data from the
-# given provider. Any pre-existing content of the buffer will be devared
-# without warning. It is recommended to this function within a newly
-# created buffer (usually in a new split window, floating window, or tab).
-# Create a new buffer and a new window for the tree view
-#topleft vnew
-#var g_handle = tree.New(g_provider)
-
-def Main(): void
+def Window(): void
     var provider = {
     \ 'getChildren': GetChildren,
     \ 'getParent': GetParent,
@@ -114,7 +144,16 @@ def Main(): void
     \ }
 
     topleft vnew
-    g_handle = tree.New(provider)
+    b:handle = tree.New(provider)
+    augroup vim_yggdrasil
+        autocmd!
+        autocmd FileType yggdrasil Filetype_syntax() | Filetype_settings()
+        autocmd BufEnter <buffer> tree.Render(b:handle)
+    augroup END
+
+    setlocal filetype=yggdrasil
+
+    b:handle.update(b:handle, [])
 enddef
 
-#Main()
+command Vim9TreeWindow Window()
