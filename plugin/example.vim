@@ -41,7 +41,7 @@ enddef
 # The getChildren method can be called with no object argument, in that case it
 # returns the root of the tree, or with one object as second argument, in that
 # case it returns a list of objects that are children to the given object.
-def Get_children(Callback: func, ignition: dict<any>, object_id: number): void
+def Get_children(Render_children_nodes: func, ignition: dict<any>, object_id: number): void
     if !empty(ignition)
         b:nodes = {
             0: { "label": "Tree window for buffer: " .. ignition["bufnr"] },
@@ -68,17 +68,12 @@ def Get_children(Callback: func, ignition: dict<any>, object_id: number): void
             children = b:tree[object_id]
         endif
     endif
-    Callback(children)
-enddef
-
-# The getParent method returns the parent of a given object.
-def Get_parent(Callback: func, object_id: number): void
-    Callback(Number_to_parent(object_id))
+    Render_children_nodes(children)
 enddef
 
 # The getTreeItem returns the tree item representation of a given object.
-def Get_tree_item(Callback: func, object_id: number): void
-    Callback(Number_to_treeitem(object_id))
+def Get_tree_item(Render_new_node: func, object_id: number): void
+    Render_new_node(Number_to_treeitem(object_id))
 enddef
 
 # Buffer local settings
@@ -125,7 +120,6 @@ enddef
 def Tree_window(): void
     var provider = {
         'getChildren': Get_children,
-        'getParent': Get_parent,
         'getTreeItem': Get_tree_item,
         }
 
