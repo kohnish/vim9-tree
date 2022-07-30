@@ -66,22 +66,19 @@ def Get_children(Callback: func, ignition: dict<any>, object_id: number): void
     if object_id != -1
         if has_key(b:tree, object_id)
             children = b:tree[object_id]
-        else
-            Callback('failure', [])
-            return
         endif
     endif
-    Callback('success', children)
+    Callback(children)
 enddef
 
 # The getParent method returns the parent of a given object.
 def Get_parent(Callback: func, object_id: number): void
-    Callback('success', Number_to_parent(object_id))
+    Callback(Number_to_parent(object_id))
 enddef
 
 # The getTreeItem returns the tree item representation of a given object.
 def Get_tree_item(Callback: func, object_id: number): void
-    Callback('success', Number_to_treeitem(object_id))
+    Callback(Number_to_treeitem(object_id))
 enddef
 
 # Buffer local settings
