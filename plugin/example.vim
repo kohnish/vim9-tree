@@ -132,8 +132,9 @@ def Tree_window(): void
         'getTreeItem': Get_tree_item,
         }
 
+    var orig_bufnr = bufnr('')
     topleft vnew
-    b:handle = tree.New(provider, {"bufnr": bufnr('')})
+    b:handle = tree.New(provider, {"bufnr": orig_bufnr})
     augroup vim_yggdrasil
         autocmd!
         autocmd FileType yggdrasil Filetype_syntax() | Filetype_settings()
