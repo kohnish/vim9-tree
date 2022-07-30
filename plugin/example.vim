@@ -41,7 +41,7 @@ enddef
 # The getChildren method can be called with no object argument, in that case it
 # returns the root of the tree, or with one object as second argument, in that
 # case it returns a list of objects that are children to the given object.
-def Get_children(Render_children_nodes: func, ignition: dict<any>, object_id: number): void
+def Get_children(Render_chilRender_children_nodesdren_nodes: func, ignition: dict<any>, object_id: number): void
     if !empty(ignition)
         b:nodes = {
             0: { "label": "Tree window for buffer: " .. ignition["bufnr"] },
@@ -72,8 +72,8 @@ def Get_children(Render_children_nodes: func, ignition: dict<any>, object_id: nu
 enddef
 
 # The getTreeItem returns the tree item representation of a given object.
-def Get_tree_item(Render_node: func, object_id: number): void
-    Render_node(Number_to_treeitem(object_id))
+def Get_tree_item(Append_node: func, object_id: number): void
+    Append_node(Number_to_treeitem(object_id))
 enddef
 
 # Buffer local settings
@@ -129,7 +129,7 @@ def Tree_window(): void
     augroup vim_yggdrasil
         autocmd!
         autocmd FileType yggdrasil Filetype_syntax() | Filetype_settings()
-        autocmd BufEnter <buffer> tree.Render(b:handle)
+        autocmd BufEnter <buffer> tree.Write_tree(b:handle)
     augroup END
 
     setlocal filetype=yggdrasil
