@@ -1,231 +1,199 @@
 vim9script
 
-# Callback to retrieve the tree item representation of an object.
-def Node_get_tree_item_cb(node: dict<any>, object_id: number, status: string, tree_item: dict<any>): void
-    if status ==? 'success'
-        var new_node = Node_new(node.tree, object_id, tree_item, node)
-        add(node.children, new_node)
-        Render(new_node.tree)
-    endif
-enddef
+import autoload "../../lazyload/tree.vim"
 
-# Callback to retrieve the children objects of a node.
-def Node_get_children_cb(node: dict<any>, status: string, childObjectList: list<any>): void
-    for childObject in childObjectList
-        node.tree.provider.getTreeItem((result: string, tree_item: dict<any>) => Node_get_tree_item_cb(node, childObject, result, tree_item), childObject)
+def OpenHierarchyCallNode(current_node_num: number, params: dict<any>, results: list<any>): void
+    if len(results) == 0
+        return
+    endif
+    var len_results = len(results)
+    var len_tree = len(b:tree)
+    b:tree[current_node_num] = range(len_tree, len_tree + len_results - 1)
+    var counter = 0
+    for i in b:tree[current_node_num]
+        b:tree[i] = []
+        b:nodes[i] = { "query": {"item": results[counter][b:ctx["hierarchy_result_key"]] } }
+        counter = counter + 1
     endfor
+    b:handle.update(b:handle, range(current_node_num, current_node_num + len(b:tree[current_node_num]) - 1))
+    tree.Tree_set_collapsed_under_cursor(b:handle, 0)
 enddef
 
-# Set the node to be collapsed or expanded.
-# When {collapsed} evaluates to 0 the node is expanded, when it is 1 the node is
-# collapsed, when it is equal to -1 the node is toggled (it is expanded if it
-# was collapsed, and vice versa).
-def Node_set_collapsed(self: dict<any>, collapsed: number): void
-    self.collapsed = collapsed < 0 ? !self.collapsed : !!collapsed
+def ShowFuncOnBuffer(info: dict<any>): void
+    var cur = win_findbuf(bufnr(''))[0]
+    win_gotoid(b:ctx["original_win_id"])
+    execute "edit " .. info["uri"]
+    cursor(info["selectionRange"]["start"]["line"] + 1, info["selectionRange"]["start"]["character"] + 1)
+    win_gotoid(cur)
 enddef
 
-# Given a funcref {Condition}, return a list of all nodes in the subtree of
-# {node} for which {Condition} evaluates to v:true.
-def Search_subtree(node: dict<any>, Condition: func): list<any>
-    if Condition(node)
-        return [node]
+def Command_callback(id: number): void
+    tree.Tree_set_collapsed_under_cursor(b:handle, 0)
+    if has_key(b:nodes, id)
+        ShowFuncOnBuffer(b:nodes[id]["query"]["item"])
     endif
-    if len(node.children) < 1
-        return []
+    if has_key(b:tree, id) && len(b:tree[id]) != 0
+        return
     endif
-    var result = []
-    for child in node.children
-        result = result + Search_subtree(child, Condition)
-    endfor
-    return result
+    var param = b:nodes[id]["query"]
+    lsc#server#userCall_with_server(b:ctx["server"], b:ctx["hierarchy_call"], param, function(OpenHierarchyCallNode, [id, param]))
 enddef
 
-# Execute the action associated to a node
-def Node_exec(self: dict<any>): void
-    if has_key(self.tree_item, 'command')
-        self.tree_item.command()
-    endif
-enddef
-
-# Return the depth level of the node in the tree. The level is defined
-# recursively: the root has depth 0, and each node has depth equal to the depth
-# of its parent increased by 1.
-def Node_level(self: dict<any>): number
-    if self.parent == {}
-        return 0
-    endif
-    return 1 + self.parent.level(self)
-enddef
-
-# Return the string representation of the node. The {level} argument represents
-# the depth level of the node in the tree and it is passed for convenience, to
-# simplify the implementation and to avoid re-computing the depth.
-def Node_render(self: dict<any>, level: number): string
-    var indent = repeat(' ', 2 * level)
-    var mark = '• '
-
-    if len(self.children) > 0 || self.lazy_open != false
-        mark = self.collapsed ? '▸ ' : '▾ '
-    endif
-
-    var label = split(self.tree_item.label, "\n")
-    extend(self.tree.index, map(range(len(label)), (i, v) => self))
-
-    var repr = indent .. mark .. label[0]
-    \          .. join(map(label[1 : ], (_, l) => "\n" .. indent .. '  ' .. l))
-
-    var lines = [repr]
-    if !self.collapsed
-        if self.lazy_open
-            self.lazy_open = false
-            self.tree.provider.getChildren((result, children) => Node_get_children_cb(self, result, children), {}, self.object)
+def Number_to_parent(id: number): dict<any>
+    for [parent, children] in items(b:tree)
+        if index(children, id) > 0
+            return parent
         endif
-        for child in self.children
-            add(lines, child.render(child, level + 1))
-        endfor
-    endif
-
-    return join(lines, "\n")
-enddef
-
-# Insert a new node in the tree, internally represented by a unique progressive
-# integer identifier {id}. The node represents a certain {object} (children of
-# {parent}) belonging to a given {tree}, having an associated action to be
-# triggered on execution defined by the function object {exec}. If {collapsed}
-# is true the node will be rendered as collapsed in the view. If {lazy_open} is
-# true, the children of the node will be fetched when the node is expanded by
-# the user.
-def Node_new(tree: dict<any>, object_id: number, tree_item: dict<any>, parent: dict<any>): dict<any>
-    tree.maxid += 1
-    return {
-    \ 'id': tree.maxid,
-    \ 'tree': tree,
-    \ 'object': object_id,
-    \ 'tree_item': tree_item,
-    \ 'parent': parent,
-    \ 'collapsed': tree_item.collapsibleState ==? 'collapsed',
-    \ 'lazy_open': tree_item.collapsibleState !=? 'none',
-    \ 'children': [],
-    \ 'level': Node_level,
-    \ 'exec': Node_exec,
-    \ 'set_collapsed': Node_set_collapsed,
-    \ 'render': Node_render
-    \ }
-enddef
-
-# Callback that sets the root node of a given {tree}, creating a new node
-# with a {tree_item} representation for the given {object}. If {status} is
-# equal to 'success', the root node is set and the tree view is updated
-# accordingly, otherwise nothing happens.
-def Tree_set_root_cb(tree: dict<any>, object_id: number, status: string, tree_item: dict<any>): void
-    if status ==? 'success'
-        tree.maxid = -1
-        tree.root = Node_new(tree, object_id, tree_item, {})
-        Render(tree)
-    endif
-enddef
-
-# Return the node currently under the cursor from the given {tree}.
-def Get_node_under_cursor(tree: dict<any>): dict<any>
-    var index = min([line('.'), len(tree.index) - 1])
-    return tree.index[index]
-enddef
-
-# Expand or collapse the node under cursor, and render the tree.
-# Please refer to *Node_set_collapsed()* for details about the
-# arguments and behaviour.
-export def Tree_set_collapsed_under_cursor(self: dict<any>, collapsed: number): void
-    var node = Get_node_under_cursor(self)
-    node.set_collapsed(node, collapsed)
-    Render(self)
-enddef
-
-# Run the action associated to the node currently under the cursor.
-export def Tree_exec_node_under_cursor(self: dict<any>): void
-    var node = Get_node_under_cursor(self)
-    node.exec(node)
-enddef
-
-# Render the {tree}. This will replace the content of the buffer with the
-# tree view. Clear the index, setting it to a list containing a guard
-# value for index 0 (line numbers are one-based).
-export def Render(tree: dict<any>): void
-    if &filetype !=# 'yggdrasil'
-        return
-    endif
-
-    var cursor = getpos('.')
-    tree.index = [-1]
-    var text = tree.root.render(tree.root, 0)
-
-    setlocal modifiable
-    # WIP
-    #silent 1,$delete
-    #append(line('$'), [text])
-    #normal! G
-    #execute "put " text
-    #silent 0put=text
-    #$d_
-    deletebufline(tree.bufnr, 1, "$")
-    map(split(text, "\n"), (i, v) => append(i, [v]))
-
-    setlocal nomodifiable
-
-    setpos('.', cursor)
-enddef
-
-# If {status} equals 'success', update all nodes of {tree} representing
-# an {obect} with given {tree_item} representation.
-def Node_update(tree: dict<any>, object_id: number, status: string, tree_item: dict<any>): void
-    if status !=? 'success'
-        return
-    endif
-    for node in Search_subtree(tree.root, (n) => n.object == object_id)
-        node.tree_item = tree_item
-        node.children = []
-        node.lazy_open = tree_item.collapsibleState !=? 'none'
     endfor
-    Render(tree)
+    return {}
 enddef
 
-# Update the view if nodes have changed. If called with no arguments,
-# update the whole tree. If called with an {object} as argument, update
-# all the subtrees of nodes corresponding to {object}.
-def Tree_update(self: dict<any>, args: list<any>): void
-    if len(args) == 0 
-        self.provider.getChildren((child_status: string, children_list: list<any>) => self.provider.getTreeItem( 
-                    \ (tree_status: string, tree_item: dict<any>) => Tree_set_root_cb(self, children_list[0], tree_status, tree_item), children_list[0]),
-                    \ self.ignition, -1)
-    else
-        self.provider.getTreeItem((result, item) => Node_update(self, args[0], result, item), args[0])
+def Number_to_treeitem(id: number): dict<any>
+    var label = b:nodes[id]["query"]["item"]["name"]
+    return {
+    \   'id': string(id),
+    \   'command': () => Command_callback(id),
+    \   'collapsibleState': len(b:tree[id]) > 0 ? 'collapsed' : 'none',
+    \   'label': label,
+    \ }
+enddef
+
+def GetChildren(Callback: func, ignition: dict<any>, object_id: number): void
+    if !empty(ignition)
+        b:ctx = {
+            "server": ignition["server"],
+            "original_win_id": ignition["original_win_id"],
+            "hierarchy_call": ignition["hierarchy_call"],
+            "hierarchy_result_key": ignition["hierarchy_result_key"],
+            }
+        b:nodes = {
+            0: { "query": ignition["query"] }
+            }
+        b:tree = {
+            0: [],
+            }
+    endif
+    var children = [0]
+    if object_id != -1
+        if has_key(b:tree, object_id)
+            children = b:tree[object_id]
+        endif
+    endif
+    Callback(children)
+enddef
+
+def GetParent(Callback: func, object_id: number): void
+    Callback(Number_to_parent(object_id))
+enddef
+
+def GetTreeItem(Callback: func, object_id: number): void
+    Callback(Number_to_treeitem(object_id))
+enddef
+
+def Filetype_settings(): void 
+    setlocal bufhidden=wipe
+    setlocal buftype=nofile
+    setlocal foldcolumn=0
+    setlocal foldmethod=manual
+    setlocal nobuflisted
+    setlocal nofoldenable
+    setlocal nolist
+    setlocal nomodifiable
+    setlocal nonumber
+    setlocal norelativenumber
+    setlocal nospell
+    setlocal noswapfile
+    setlocal nowrap
+
+    nnoremap <silent> <buffer> <Plug>(yggdrasil-toggle-node) <ScriptCmd>tree.Tree_set_collapsed_under_cursor(b:handle, -1)<CR>
+    nnoremap <silent> <buffer> <Plug>(yggdrasil-open-node) <ScriptCmd>tree.Tree_set_collapsed_under_cursor(b:handle, 0)<CR>
+    nnoremap <silent> <buffer> <Plug>(yggdrasil-close-node) <ScriptCmd>tree.Tree_set_collapsed_under_cursor(b:handle, 1)<CR>
+    nnoremap <silent> <buffer> <Plug>(yggdrasil-execute-node) <ScriptCmd>tree.Tree_exec_node_under_cursor(b:handle)<CR>
+    nnoremap <silent> <buffer> <Plug>(yggdrasil-wipe-tree) <ScriptCmd>tree.Tree_wipe(b:handle)<CR>
+
+    if !exists('g:yggdrasil_no_default_maps')
+        nmap <silent> <buffer> o    <Plug>(yggdrasil-toggle-node)
+        nmap <silent> <buffer> <CR> <Plug>(yggdrasil-execute-node)
+        nmap <silent> <buffer> q    <Plug>(yggdrasil-wipe-tree)
     endif
 enddef
 
-# Destroy the tree view. Wipe out the buffer containing it.
-export def Tree_wipe(self: dict<any>): void
-    execute 'bwipeout ' .. self.bufnr
+def Filetype_syntax(): void
+    syntax clear
+    syntax match YggdrasilMarkLeaf        "•" contained
+    syntax match YggdrasilMarkCollapsed   "▸" contained
+    syntax match YggdrasilMarkExpanded    "▾" contained
+    syntax match YggdrasilNode            "\v^(\s|[▸▾•])*.*" contains=YggdrasilMarkLeaf,YggdrasilMarkCollapsed,YggdrasilMarkExpanded
+
+    highlight def link YggdrasilMarkLeaf        Type
+    highlight def link YggdrasilMarkExpanded    Type
+    highlight def link YggdrasilMarkCollapsed   Macro
 enddef
 
-# Turns the current buffer into an Yggdrasil tree view. Tree data is retrieved
-# from the given {provider}, and the state of the tree is stored in a
-# buffer-local variable called g_tree_top.
-#
-# The {bufnr} stores the buffer number of the view, {maxid} is the highest
-# known internal identifier of the nodes. The {index} is a list that
-# maps line numbers to nodes.
-export def New(provider: dict<any>, ignition: dict<any>): dict<any>
-    var tree_top = {
-    \ 'bufnr': bufnr('%'),
-    \ 'maxid': -1,
-    \ 'root': {},
-    \ 'index': [],
-    \ 'provider': provider,
-    \ 'set_collapsed_under_cursor': Tree_set_collapsed_under_cursor,
-    \ 'exec_node_under_cursor': Tree_exec_node_under_cursor,
-    \ 'update': Tree_update,
-    \ 'wipe': Tree_wipe,
-    \ 'ignition': ignition,
-    \ }
+def DeleteBufByPrefix(name: string): void
+    for i in tabpagebuflist()
+        if buffer_name(i)[0 : len(name) - 1] ==# name
+            execute "bdelete " .. i
+            break
+        endif
+    endfor
+enddef
 
-    return tree_top
+def OpenTreeWindow(ignition: dict<any>): void
+    var provider = {
+        'getChildren': GetChildren,
+        'getParent': GetParent,
+        'getTreeItem': GetTreeItem,
+        }
+
+    var buf_name_prefix = "Call hierarchy ("
+    var buf_name = buf_name_prefix .. ignition["mode"] .. ")"
+    if !exists("g:lsc_allow_multi_call_hierarchy_buf") || !g:lsc_allow_multi_call_hierarchy_buf
+        DeleteBufByPrefix(buf_name_prefix)
+    endif
+    topleft vnew
+    execute "file " .. buf_name .. " [" .. bufnr('') .. "]"
+    vertical resize 45
+    b:handle = tree.New(provider, ignition)
+    augroup vim_yggdrasil
+        autocmd!
+        autocmd FileType yggdrasil Filetype_syntax() | Filetype_settings()
+        autocmd BufEnter <buffer> tree.Render(b:handle)
+    augroup END
+
+    setlocal filetype=yggdrasil
+
+    b:handle.update(b:handle, [])
+enddef
+
+def PrepHierarchyCb(mode_info: dict<any>, results: list<any>): void
+    if len(results) > 0
+        var params = {"item": results[0]}
+        var ignition = {
+            "server": lsc#server#forFileType(&filetype)[0],
+            "original_win_id": win_getid(),
+            "query": params,
+            "mode": mode_info["name"],
+            "hierarchy_call": mode_info["call_name"],
+            "hierarchy_result_key": mode_info["result_key"],
+            }
+        OpenTreeWindow(ignition)
+    endif
+enddef
+
+export def PrepCallHierarchy(mode: string): void
+    lsc#file#flushChanges()
+    var prep_req = "textDocument/prepareCallHierarchy"
+    var hierarchy_call = "callHierarchy/incomingCalls"
+    var result_key = "from"
+    if mode == "outgoing"
+        hierarchy_call = "callHierarchy/outgoingCalls"
+        result_key = "to"
+    endif
+    var mode_info = {
+        "name": mode,
+        "call_name": hierarchy_call,
+        "result_key": result_key
+        }
+    lsc#server#userCall(prep_req, lsc#params#documentPosition(), function(PrepHierarchyCb, [mode_info]))
 enddef
