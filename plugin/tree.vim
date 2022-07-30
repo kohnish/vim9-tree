@@ -1,9 +1,9 @@
 vim9script
 
 # Callback to retrieve the tree item representation of an object.
-def Node_get_tree_item_cb(node: dict<any>, object: number, status: string, tree_item: dict<any>): void
+def Node_get_tree_item_cb(node: dict<any>, object_id: number, status: string, tree_item: dict<any>): void
     if status ==? 'success'
-        var new_node = Node_new(node.tree, object, tree_item, node)
+        var new_node = Node_new(node.tree, object_id, tree_item, node)
         add(node.children, new_node)
         Render(new_node.tree)
     endif
@@ -78,7 +78,7 @@ def Node_render(self: dict<any>, level: number): string
     if !self.collapsed
         if self.lazy_open
             self.lazy_open = false
-            self.tree.provider.getChildren((result, children) => Node_get_children_cb(self, result, children), [self.object])
+            self.tree.provider.getChildren((result, children) => Node_get_children_cb(self, result, children), {}, self.object)
         endif
         for child in self.children
             add(lines, child.render(child, level + 1))
@@ -95,12 +95,12 @@ enddef
 # is true the node will be rendered as collapsed in the view. If {lazy_open} is
 # true, the children of the node will be fetched when the node is expanded by
 # the user.
-def Node_new(tree: dict<any>, object: number, tree_item: dict<any>, parent: dict<any>): dict<any>
+def Node_new(tree: dict<any>, object_id: number, tree_item: dict<any>, parent: dict<any>): dict<any>
     tree.maxid += 1
     return {
     \ 'id': tree.maxid,
     \ 'tree': tree,
-    \ 'object': object,
+    \ 'object': object_id,
     \ 'tree_item': tree_item,
     \ 'parent': parent,
     \ 'collapsed': tree_item.collapsibleState ==? 'collapsed',
@@ -117,10 +117,10 @@ enddef
 # with a {tree_item} representation for the given {object}. If {status} is
 # equal to 'success', the root node is set and the tree view is updated
 # accordingly, otherwise nothing happens.
-def Tree_set_root_cb(tree: dict<any>, object: number, status: string, tree_item: dict<any>): void
+def Tree_set_root_cb(tree: dict<any>, object_id: number, status: string, tree_item: dict<any>): void
     if status ==? 'success'
         tree.maxid = -1
-        tree.root = Node_new(tree, object, tree_item, {})
+        tree.root = Node_new(tree, object_id, tree_item, {})
         Render(tree)
     endif
 enddef
@@ -176,11 +176,11 @@ enddef
 
 # If {status} equals 'success', update all nodes of {tree} representing
 # an {obect} with given {tree_item} representation.
-def Node_update(tree: dict<any>, object: number, status: string, tree_item: dict<any>): void
+def Node_update(tree: dict<any>, object_id: number, status: string, tree_item: dict<any>): void
     if status !=? 'success'
         return
     endif
-    for node in Search_subtree(tree.root, (n) => n.object == object)
+    for node in Search_subtree(tree.root, (n) => n.object == object_id)
         node.tree_item = tree_item
         node.children = []
         node.lazy_open = tree_item.collapsibleState !=? 'none'
@@ -195,7 +195,7 @@ def Tree_update(self: dict<any>, args: list<any>): void
     if len(args) == 0 
         self.provider.getChildren((child_status: string, children_list: list<any>) => self.provider.getTreeItem( 
                     \ (tree_status: string, tree_item: dict<any>) => Tree_set_root_cb(self, children_list[0], tree_status, tree_item), children_list[0]),
-                    \ [])
+                    \ self.ignition, -1)
     else
         self.provider.getTreeItem((result, item) => Node_update(self, args[0], result, item), args[0])
     endif
@@ -213,7 +213,7 @@ enddef
 # The {bufnr} stores the buffer number of the view, {maxid} is the highest
 # known internal identifier of the nodes. The {index} is a list that
 # maps line numbers to nodes.
-export def New(provider: dict<any>): dict<any>
+export def New(provider: dict<any>, ignition: dict<any>): dict<any>
     var tree_top = {
     \ 'bufnr': bufnr('%'),
     \ 'maxid': -1,
@@ -224,6 +224,7 @@ export def New(provider: dict<any>): dict<any>
     \ 'exec_node_under_cursor': Tree_exec_node_under_cursor,
     \ 'update': Tree_update,
     \ 'wipe': Tree_wipe,
+    \ 'ignition': ignition,
     \ }
 
     return tree_top
