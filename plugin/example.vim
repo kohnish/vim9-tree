@@ -1,6 +1,6 @@
 vim9script
 
-import "tree.vim"
+import "./tree.vim"
 
 # Action to be performed when executing an object in the tree.
 def Command_callback(id: number): void
@@ -131,7 +131,7 @@ def Tree_window(): void
 
     var orig_bufnr = bufnr('')
     topleft vnew
-    b:handle = tree.New(provider, {"bufnr": orig_bufnr})
+    b:handle = tree.New_handle(provider, {"bufnr": orig_bufnr})
     augroup vim_yggdrasil
         autocmd!
         autocmd FileType yggdrasil Filetype_syntax() | Filetype_settings()
@@ -140,7 +140,7 @@ def Tree_window(): void
 
     setlocal filetype=yggdrasil
 
-    b:handle.update(b:handle, [])
+    tree.Tree_update(b:handle, [])
 enddef
 
 command Vim9TreeWindow Tree_window()
