@@ -123,8 +123,8 @@ export def Tree_update(tree: dict<any>, node_entries: list<number>): void
     endif
 enddef
 
-export def Tree_wipe(self: dict<any>): void
-    execute 'bwipeout ' .. self.bufnr
+export def Tree_wipe(tree: dict<any>): void
+    execute 'bwipeout ' .. tree.bufnr
 enddef
 
 export def New_handle(provider: dict<any>, ignition: dict<any>): dict<any>
