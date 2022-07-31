@@ -69,8 +69,8 @@ def Get_children(Render_children_nodes: func, ignition: dict<any>, object_id: nu
 enddef
 
 # The getTreeItem returns the tree item representation of a given object.
-def Get_tree_item(Append_node: func, object_id: number): void
-    Append_node(Number_to_treeitem(object_id))
+def Get_tree_item(Render_node: func, object_id: number): void
+    Render_node(Number_to_treeitem(object_id))
 enddef
 
 # Buffer local settings
