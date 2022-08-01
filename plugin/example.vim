@@ -18,7 +18,6 @@ enddef
 # object (i.e. a given integer number).
 #
 # The four mandatory fields for the tree item representation are:
-#  * id: unique string identifier for the node in the tree
 #  * collapsibleState: string value, equal to:
 #     + 'collapsed' for an inner node initially collapsed
 #     + 'expanded' for an inner node initially expanded
@@ -28,11 +27,10 @@ enddef
 #  * labe string representing the node in the view
 def Number_to_treeitem(id: number): dict<any>
     return {
-    \   'id': string(id),
-    \   'command': () => Command_callback(id),
-    \   'collapsibleState': len(b:integer_tree[id]) > 0 ? 'collapsed' : 'none',
-    \   'label': b:nodes[id]["label"]
-    \ }
+        'command': () => Command_callback(id),
+        'collapsibleState': len(b:integer_tree[id]) > 0 ? 'collapsed' : 'none',
+        'label': b:nodes[id]["label"]
+        }
 enddef
 
 # The getChildren method can be called with no object argument, in that case it
